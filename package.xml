@@ -36,7 +36,7 @@
     <min>1.4.0</min>
    </pearinstaller>
    <package>
-    <name>File_CAB</name>
+    <name>File_Cabinet</name>
     <channel>pear.php.net</channel>
    </package>
    <extension>
