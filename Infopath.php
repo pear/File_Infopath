@@ -349,8 +349,11 @@ class File_Infopath
         $myschema = new DOMDocument;
         $myschema->loadXML($this->_cab->extract('myschema.xsd'));
 
+        $xpath = new DOMXPath($myschema);
+
         $schema = array();
         foreach ($myschema->getElementsByTagNameNS(self::XSD_NAMESPACE, 'element') as $element) {
+//        foreach ($xpath->query('//xsd:schema/xsd:element') as $element) {
             $field_name = $element->getAttribute('name');
             $type = $element->getAttribute('type');
 
@@ -426,9 +429,47 @@ class File_Infopath
                 $schema[$field_name]['option_type'] = 'radio';
             }
         }
-
         // checkbox options
-//        if ($this->)
+        // select any element that has a complextype child, that isn't the root element
+        // note: is it possible to extract multiple elements out of a path?
+        $list = $xpath->query('//xsd:schema/xsd:element[@name!="feedback"]/xsd:complexType/..');
+        if ($list->length === 0) {
+            throw new File_Infopath_Exception('Error reading from file');
+        }
+        foreach ($list as $group) {
+            $group_name = $group->getAttribute('name');
+            $elements = array();
+            foreach ($group->getElementsByTagNameNS(self::XSD_NAMESPACE, 'element') as $element) {
+                list(, $element_ref) = explode(':', $element->getAttribute('ref'));
+                $all_there = true;
+                // if it has the prefix and is a boolean
+                if (preg_match('/^' . $group_name . '_/', $element_ref) && 
+                    (preg_match('/_other$/', $element_ref) && $schema[$element_ref]['type'] === 'string' ||
+                    $schema[$element_ref]['type'] === 'boolean') 
+                    ) {
+                    
+                    $elements[] = $element_ref;
+                } else {
+                    $all_there = false;
+                    break;
+                }
+            }
+            if ($all_there) {
+                $schema[$group_name] = array(
+                    'type'     => 'string',
+                    'required' => false, // fixme!
+                    'default'  => null, // fixme!
+                    'options'  => array(),
+                    'size'     => null,
+                    'option_type' => 'checkbox',
+                );
+                foreach ($elements as $element) {
+                    $option_name = preg_replace('/^' . $group_name . '_/', '', $element);
+                    unset($schema[$element]);
+                    $schema[$group_name]['options'][$option_name] = $option_name;
+                }
+            }
+        }
 
         return $schema;
     }
