@@ -126,6 +126,14 @@ class File_Infopath
     private $_submit = array();
 
     /**
+     * Name of the root group, usually set to "myFields" by Infopath
+     * 
+     * @access private
+     * @var string
+     */
+    private $_root_element;
+
+    /**
      * Constructor
      *
      * @param string $filename Infopath file's name
@@ -135,15 +143,26 @@ class File_Infopath
         // Instantiate the Cabinet reader
         $this->_cab = new File_Cabinet($filename);
 
-        // Read manifest.xsf and obtain the list of views
+        // Read manifest.xsf to obtain information about the form
         $manifest = new DOMDocument;
         $manifest->loadXML($this->_cab->extract('manifest.xsf'));
+
+        $xpath = new DOMXPath($manifest);
+
+        // Root element[]
+        $list = $xpath->query('//xsf:package/xsf:files/xsf:file[@name="myschema.xsd"]/xsf:fileProperties/xsf:property[@name="rootElement"]/@value');
+        if ($list->length === 0) {
+            throw new File_Infopath_Exception('Error reading document');
+        }
+        $this->_root_element = $list->item(0)->value;
+
+        // Obtain the list of views
         foreach ($manifest->getElementsByTagNameNS(self::XSF_NAMESPACE, 'view') as $view) {
             $mainpane = $view->getElementsByTagNameNS(self::XSF_NAMESPACE, 'mainpane')->item(0);
             $this->_views[$view->getAttribute('name')] = $mainpane->getAttribute('transform');
         }
 
-        // obtain any submit information, if available
+        // Obtain any submit information, if available
         $element = $manifest->getElementsByTagNameNS(self::XSF_NAMESPACE, 'submit')->item(0);
         if (!is_null($element)) {
             $http_handler = $element->getElementsByTagNameNS(self::XSF_NAMESPACE, 'useHttpHandler')->item(0);
@@ -335,8 +354,8 @@ class File_Infopath
             $field_name = $element->getAttribute('name');
             $type = $element->getAttribute('type');
 
-            if ($field_name !== 'myFields' &&
-                $field_name !== ''         &&
+            if ($field_name !== $this->_root_element &&
+                $field_name !== ''                   &&
                 $type       !== '') {
                 $attributes = array(
                     'default'  => null,
@@ -363,7 +382,7 @@ class File_Infopath
         // (Also available from sampledata.xml)
         $template = new DOMDocument;
         $template->loadXML($this->_cab->extract('template.xml'));
-        $my_fields = $template->getElementsByTagName('myFields')->item(0);
+        $my_fields = $template->getElementsByTagName($this->_root_element)->item(0);
         $my_namespace = $my_fields->getAttribute('xmlns:my');
         foreach ($my_fields->getElementsByTagNameNS($my_namespace, '*') as $element) {
             if ($element->textContent !== '') {
@@ -409,7 +428,7 @@ class File_Infopath
         }
 
         // checkbox options
-        if ($this->)
+//        if ($this->)
 
         return $schema;
     }
