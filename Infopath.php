@@ -149,7 +149,7 @@ class File_Infopath
 
         $xpath = new DOMXPath($manifest);
 
-        // Root element[]
+        // Root element
         $list = $xpath->query('//xsf:package/xsf:files/xsf:file[@name="myschema.xsd"]/xsf:fileProperties/xsf:property[@name="rootElement"]/@value');
         if ($list->length === 0) {
             throw new File_Infopath_Exception('Error reading document');
@@ -429,14 +429,11 @@ class File_Infopath
                 $schema[$field_name]['option_type'] = 'radio';
             }
         }
+
         // checkbox options
         // select any element that has a complextype child, that isn't the root element
         // note: is it possible to extract multiple elements out of a path?
-        $list = $xpath->query('//xsd:schema/xsd:element[@name!="feedback"]/xsd:complexType/..');
-        if ($list->length === 0) {
-            throw new File_Infopath_Exception('Error reading from file');
-        }
-        foreach ($list as $group) {
+        foreach ($xpath->query('//xsd:schema/xsd:element[@name!="feedback"]/xsd:complexType/..') as $group) {
             $group_name = $group->getAttribute('name');
             $elements = array();
             foreach ($group->getElementsByTagNameNS(self::XSD_NAMESPACE, 'element') as $element) {
