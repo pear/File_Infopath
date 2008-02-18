@@ -17,6 +17,8 @@
  *    2 separate elements are not allowed to have the same name even if they exist in separate
  *    groups, so this means that each checkbox must be prefixed with the group name and an
  *    underscore. 
+ *  - Also use "align" function when adding text fields with labels (not necessary on other 
+ *    boxes for checkboxes and radio buttons)
  * 
  * Resources:
  *   Infopath Devel Community
@@ -126,6 +128,14 @@ class File_Infopath
     private $_submit = array();
 
     /**
+     * The submit button's text
+     * 
+     * @access private
+     * @var string
+     */
+    private $_submit_text;
+
+    /**
      * Name of the root group, usually set to "myFields" by Infopath
      * 
      * @access private
@@ -150,21 +160,26 @@ class File_Infopath
         $xpath = new DOMXPath($manifest);
 
         // Root element
-        $list = $xpath->query('//xsf:package/xsf:files/xsf:file[@name="myschema.xsd"]/xsf:fileProperties/xsf:property[@name="rootElement"]/@value');
+        $list = $xpath->query('/xsf:xDocumentClass/xsf:package/xsf:files/xsf:file[@name="myschema.xsd"]/xsf:fileProperties/xsf:property[@name="rootElement"]/@value');
         if ($list->length === 0) {
-            throw new File_Infopath_Exception('Error reading document');
+            throw new File_Infopath_Exception('Error retrieving root element from document');
         }
         $this->_root_element = $list->item(0)->value;
 
         // Obtain the list of views
-        foreach ($manifest->getElementsByTagNameNS(self::XSF_NAMESPACE, 'view') as $view) {
+        $list = $xpath->query('/xsf:xDocumentClass/xsf:views/xsf:view');
+        if ($list->length === 0) {
+            throw new File_Infopath_Exception('Error retrieving views from document');
+        }
+        foreach ($list as $view) {
             $mainpane = $view->getElementsByTagNameNS(self::XSF_NAMESPACE, 'mainpane')->item(0);
             $this->_views[$view->getAttribute('name')] = $mainpane->getAttribute('transform');
         }
 
         // Obtain any submit information, if available
-        $element = $manifest->getElementsByTagNameNS(self::XSF_NAMESPACE, 'submit')->item(0);
-        if (!is_null($element)) {
+        $submit = $xpath->query('/xsf:xDocumentClass/submit')->item(0);
+        if (!is_null($submit)) {
+            $this->_submit_text = $submit->getAttribute('caption');
             $http_handler = $element->getElementsByTagNameNS(self::XSF_NAMESPACE, 'useHttpHandler')->item(0);
             $this->_submit['action'] = $http_handler->getAttribute('href');
             $this->_submit['method'] = $http_handler->getAttribute('method');
@@ -348,36 +363,29 @@ class File_Infopath
         // Grab the schema definition from myschema.xsd
         $myschema = new DOMDocument;
         $myschema->loadXML($this->_cab->extract('myschema.xsd'));
-
         $xpath = new DOMXPath($myschema);
-
         $schema = array();
-        foreach ($myschema->getElementsByTagNameNS(self::XSD_NAMESPACE, 'element') as $element) {
-//        foreach ($xpath->query('//xsd:schema/xsd:element') as $element) {
-            $field_name = $element->getAttribute('name');
-            $type = $element->getAttribute('type');
 
-            if ($field_name !== $this->_root_element &&
-                $field_name !== ''                   &&
-                $type       !== '') {
-                $attributes = array(
-                    'default'  => null,
-                    'required' => false,
-                    'size'     => null, 
-                    );
+        // is there an easier way to specify existence of the attribute "type"?
+        foreach ($xpath->query('/xsd:schema/xsd:element[@name!="' . $this->_root_element . '"]/@type/..') as $element) {
 
-                // In <schema>.xsd the field types will either be from "xsd" or "my" namespace
-                list(, $type) = explode(':', $element->getAttribute('type'));
+            $attributes = array(
+                'default'  => null,
+                'required' => false,
+                'size'     => null, 
+                );
 
-                if ($type === 'requiredString') {
-                    $attributes['type'] = 'string';
-                    $attributes['required'] = true;
-                } else {
-                    $attributes['type'] = $type;
-                }
+            // In <schema>.xsd the field types will either be from "xsd" or "my" namespace
+            list(, $type) = explode(':', $element->getAttribute('type'));
 
-                $schema[$field_name] = $attributes;
+            if ($type === 'requiredString') {
+                $attributes['type'] = 'string';
+                $attributes['required'] = true;
+            } else {
+                $attributes['type'] = $type;
             }
+
+            $schema[$element->getAttribute('name')] = $attributes;
         }
 
 
@@ -433,37 +441,51 @@ class File_Infopath
         // checkbox options
         // select any element that has a complextype child, that isn't the root element
         // note: is it possible to extract multiple elements out of a path?
-        foreach ($xpath->query('//xsd:schema/xsd:element[@name!="feedback"]/xsd:complexType/..') as $group) {
+        foreach ($xpath->query('/xsd:schema/xsd:element[@name!="' . $this->_root_element . '"]/xsd:complexType/..') as $group) {
             $group_name = $group->getAttribute('name');
             $elements = array();
+            $element_other = null;
             foreach ($group->getElementsByTagNameNS(self::XSD_NAMESPACE, 'element') as $element) {
                 list(, $element_ref) = explode(':', $element->getAttribute('ref'));
                 $all_there = true;
                 // if it has the prefix and is a boolean
-                if (preg_match('/^' . $group_name . '_/', $element_ref) && 
-                    (preg_match('/_other$/', $element_ref) && $schema[$element_ref]['type'] === 'string' ||
-                    $schema[$element_ref]['type'] === 'boolean') 
-                    ) {
-                    
+                $found_element_binding = preg_match('/^' . $group_name . '_/', $element_ref);
+                if ($found_element_binding && $schema[$element_ref]['type'] === 'boolean') {
                     $elements[] = $element_ref;
+                } else if ($found_element_binding && preg_match('/_other$/', $element_ref) && $schema[$element_ref]['type'] === 'string') {
+                    $element_other = $element_ref;
                 } else {
                     $all_there = false;
                     break;
                 }
             }
             if ($all_there) {
+                $view1_xpath = new DOMXPath($view1);
                 $schema[$group_name] = array(
-                    'type'     => 'string',
-                    'required' => false, // fixme!
-                    'default'  => null, // fixme!
-                    'options'  => array(),
-                    'size'     => null,
+                    'type'        => 'string',
+                    'required'    => false, // fixme!
+                    'default'     => null, // fixme!
+                    'options'     => array(),
+                    'size'        => null,
                     'option_type' => 'checkbox',
+                    'other'       => null,
                 );
                 foreach ($elements as $element) {
                     $option_name = preg_replace('/^' . $group_name . '_/', '', $element);
                     unset($schema[$element]);
-                    $schema[$group_name]['options'][$option_name] = $option_name;
+
+                    // attempt to retrieve option label
+                    $option_div = $view1_xpath->query('//input[@xd:binding="my:' . $group_name . '/my:' . $element . '"]/ancestor::div')->item(0)->cloneNode(true);
+                    $input = $option_div->getElementsByTagName('input')->item(0); // spans seem to start and end in any old arbitrary spot
+                    $input->parentNode->removeChild($input);
+
+                    $schema[$group_name]['options'][$option_name] = trim($option_div->textContent, self::TRIM_LIST);
+                }
+                if (!is_null($element_other)) {
+                    unset($schema[$element_other]);
+                    $option_div = $view1_xpath->query('//span[@xd:binding="my:' . $group_name . '/my:' . $element_other . '"]/ancestor::div')->item(0);
+                    $schema[$group_name]['other'] = true;
+                    $schema[$group_name]['other_label'] = trim($option_div->textContent, self::TRIM_LIST);
                 }
             }
         }
