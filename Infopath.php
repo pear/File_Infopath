@@ -191,10 +191,11 @@ class File_Infopath
      * in the following format:
      * 
      * 'type' => The type of the field,
-     * 'default' => The default value as given from Infopath,
-     * 'required' => True/False depending on whether this was selected in Infopath,
+     * 'default' => The default value as was given from Infopath,
+     * 'required' => True/false depending on whether this was selected in Infopath,
      * 'size' => The size of the field,
      * 'options' => If this field has specific options, they will be listed here
+     * 'option_type' => One of either: select/multiselect/radio/checkbox
      * 
      * @return array An associative array describing the schema.
      * @access public
