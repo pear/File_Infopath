@@ -187,165 +187,6 @@ class File_Infopath
     }
 
     /**
-     * List the names of the views available
-     * 
-     * @access public
-     * @return array An array of view names
-     */
-    public function listViews()
-    {
-        return array_keys($this->_views);
-    }
-
-    /**
-     * Get a view given a view's name.  The views are stored as HTML. 
-     * 
-     * @param string $name The view name
-     * @param array $form_attrs If null, the view will be left as is.  If true, the 
-     *                          submit attributes from Infopath will be used.  Otherwise
-     *                          pass an associative array of <form> attributes.
-     *
-     * @return HTML The view
-     * @access public
-     */
-    public function getView($name, $form_attrs = null)
-    {
-        if (!extension_loaded('xsl')) {
-            throw new File_Infopath_Exception(__CLASS__ . '::' . __METHOD__ . '() requires the xsl extension');
-        }
-
-        $xsl = new DOMDocument;
-        $xsl->loadXML($this->_cab->extract($this->_views[$name]));
-
-        if (!is_null($form_attrs)) {
-            // change any span of xctname of PlainText into a text input
-            // $spans = $xsl->getElementsByTagName('span'); bug??
-            foreach ($xsl->getElementsByTagName('*') as $element) {
-
-                $field_name = $element->getAttributeNS(self::XD_NAMESPACE, 'binding');
-
-                if ($field_name !== '' && $element->getAttributeNS(self::XD_NAMESPACE, 'xctname') === 'PlainText') {
-
-                    $input = $xsl->createElement('input');
-
-                    $att_type = $xsl->createElementNS(self::XSL_NAMESPACE,'attribute');
-                    $att_type->setAttribute('name','type');
-                    $att_type->nodeValue = 'text';
-                    $input->appendChild($att_type);
-
-                    $att_name = $xsl->createElementNS(self::XSL_NAMESPACE, 'attribute');
-                    $att_name->setAttribute('name', 'name');
-                    $att_name->nodeValue = $field_name;
-                    $input->appendChild($att_name);
-
-                    $att_value = $xsl->createElementNS(self::XSL_NAMESPACE,'attribute');
-                    $att_value->setAttribute('name','value');
-                    $att_value->appendChild($element->getElementsByTagName('value-of')->item(0));
-                    $input->appendChild($att_value);
-
-                    $element->parentNode->replaceChild($input, $element);
-                }
-            }
-
-            // wrap the entire contents of <body> in a <form> tag
-            $body = $xsl->getElementsByTagName('body')->item(0);
-            $form = $xsl->createElement('form');
-            if (!is_array($form_attrs)) {
-                $form_attrs = $this->_submit;
-            }
-            foreach ($form_attrs as $key => $val) {
-                $form->setAttribute($key, $val);
-            }
-            foreach ($body->childNodes as $element) {
-                // Something's up with these DOMNodeList thingies you can't remove the element or append it without cloning
-                // otherwise it stuffs up the foreach?
-                $form->appendChild($element->cloneNode(true));
-            }
-            $body->nodeValue = '';
-            $body->appendChild($form);
-        }
-
-        $template = new DOMDocument;
-        $template->loadXML($this->_cab->extract('template.xml'));
-
-        $xslt = new XSLTProcessor;
-        $xslt->importStylesheet($xsl);
-        return $xslt->transformToXML($template);
-    }
-
-    /**
-     * Generate a Savant template with DB_DataObject_FormBuilder hooks given the
-     * html from a view.
-     *
-     * @param string $html The raw view html received from getView()
-     * @param callback $field_name_converter A callback to remove underscores from field names.
-     * @return string A Savant template with hooks for DB_DataObject_FormBuilder
-     * @access public
-     */
-    static public function convertTemplate($html, $field_name_converter = array('File_Infopath', 'convertFieldNames'))
-    {
-        $template = new DOMDocument;
-        $template->loadHTML($html);
-        $body = $template->getElementsByTagName('body')->item(0);
-        $form = $template->createElement('form');
-        foreach ($body->childNodes as $element) {
-            $form->appendChild($element->cloneNode(true));
-        }
-        $body->nodeValue = '';
-        $body->appendChild($form);
-
-        foreach ($template->getElementsByTagName('*') as $element) {
-            // no namespaces, in html mode
-            $field_name = $element->getAttribute('xd:binding');
-            $field_type = $element->getAttribute('xd:xctname');
-            if ($field_name !== '' &&
-               ($field_type === 'PlainText'       ||
-                $field_type === 'combobox'        ||
-                $field_type === 'dropdown'        ||
-                $field_type === 'OptionButton'    ||
-                $field_type === 'DTPicker_DTText' ||
-                $field_type === 'ListBox'         ||
-                $field_type === 'CheckBox')) {
-
-                list(, $field_name) = explode(':', $field_name);
-
-                // A callback to allow the user to deal with how to replace hyphens
-                $field_name = call_user_func($field_name_converter, $field_name);
-
-                $instruction = $template->createProcessingInstruction('php', "echo \$this->form['{$field_name}']['html']?");
-                if ($field_type === 'OptionButton') {
-                    $font_container = $element->parentNode->parentNode;
-                    $font_container->parentNode->replaceChild($instruction, $font_container);
-                } else if ($field_type === 'DTPicker_DTText') {
-                    $div = $element->parentNode;
-                    $div->parentNode->replaceChild($instruction, $div);
-                } else {
-                    $element->parentNode->replaceChild($instruction, $element);
-                }
-            } else if ($element->getAttribute('type') === 'button' && $element->getAttribute('value') === 'Submit') {
-                $instruction = $template->createProcessingInstruction('php', "echo \$this->form['__submit__']['html']?");
-                $element->parentNode->replaceChild($instruction, $element);
-            }
-        }
-
-        $template_html = $template->saveHTML();
-        $template_html = str_replace('<form>', '<form <?php echo $this->form[\'attributes\']?>>', $template_html);
-        return $template_html;
-    }
-
-    /**
-     * Default callback for converting hyphens (which are illegal in php variable names)
-     * 
-     * @param string $field_name The infopath field name to convert
-     * @return string The converted field name
-     * @access public
-     */
-    static public function convertFieldNames($field_name)
-    {
-        return str_replace('-', '_', $field_name);
-    }
-
-    /**
      * Return the schema in a php friendly format.  The schema will be given as an associative array
      * in the following format:
      * 
@@ -491,6 +332,177 @@ class File_Infopath
         }
 
         return $schema;
+    }
+
+    /**
+     * List the names of the views available
+     * 
+     * @access public
+     * @return array An array of view names
+     */
+    public function listViews()
+    {
+        return array_keys($this->_views);
+    }
+
+    /**
+     * Get a view given a view's name.  The views are stored as HTML. 
+     * 
+     * @param string $name The view name
+     * @param array $form_attrs If null, the view will be left as is.  If true, the 
+     *                          submit attributes from Infopath will be used.  Otherwise
+     *                          pass an associative array of <form> attributes.
+     *
+     * @return HTML The view
+     * @access public
+     */
+    public function getView($name, $form_attrs = null)
+    {
+        if (!extension_loaded('xsl')) {
+            throw new File_Infopath_Exception(__CLASS__ . '::' . __METHOD__ . '() requires the xsl extension');
+        }
+
+        $xsl = new DOMDocument;
+        $xsl->loadXML($this->_cab->extract($this->_views[$name]));
+
+        if (!is_null($form_attrs)) {
+            // change any span of xctname of PlainText into a text input
+            // $spans = $xsl->getElementsByTagName('span'); bug??
+            foreach ($xsl->getElementsByTagName('*') as $element) {
+
+                $field_name = $element->getAttributeNS(self::XD_NAMESPACE, 'binding');
+
+                if ($field_name !== '' && $element->getAttributeNS(self::XD_NAMESPACE, 'xctname') === 'PlainText') {
+
+                    $input = $xsl->createElement('input');
+
+                    $att_type = $xsl->createElementNS(self::XSL_NAMESPACE,'attribute');
+                    $att_type->setAttribute('name','type');
+                    $att_type->nodeValue = 'text';
+                    $input->appendChild($att_type);
+
+                    $att_name = $xsl->createElementNS(self::XSL_NAMESPACE, 'attribute');
+                    $att_name->setAttribute('name', 'name');
+                    $att_name->nodeValue = $field_name;
+                    $input->appendChild($att_name);
+
+                    $att_value = $xsl->createElementNS(self::XSL_NAMESPACE,'attribute');
+                    $att_value->setAttribute('name','value');
+                    $att_value->appendChild($element->getElementsByTagName('value-of')->item(0));
+                    $input->appendChild($att_value);
+
+                    $element->parentNode->replaceChild($input, $element);
+                }
+            }
+
+            // wrap the entire contents of <body> in a <form> tag
+            $body = $xsl->getElementsByTagName('body')->item(0);
+            $form = $xsl->createElement('form');
+            if (!is_array($form_attrs)) {
+                $form_attrs = $this->_submit;
+            }
+            foreach ($form_attrs as $key => $val) {
+                $form->setAttribute($key, $val);
+            }
+            foreach ($body->childNodes as $element) {
+                // Something's up with these DOMNodeList thingies you can't remove the element or append it without cloning
+                // otherwise it stuffs up the foreach?
+                $form->appendChild($element->cloneNode(true));
+            }
+            $body->nodeValue = '';
+            $body->appendChild($form);
+        }
+
+        $template = new DOMDocument;
+        $template->loadXML($this->_cab->extract('template.xml'));
+
+        $xslt = new XSLTProcessor;
+        $xslt->importStylesheet($xsl);
+        return $xslt->transformToXML($template);
+    }
+
+    /**
+     * Extract a file from the Cabinet.  Useful to retrieve a view's images.
+     * 
+     * @access public
+     * @param filename Name of file to extract
+     * @return string File contents
+     */
+    public function extract($filename)
+    {
+        return $this->_cab->extract($filename);
+    }
+
+    /**
+     * Generate a Savant template with DB_DataObject_FormBuilder hooks given the
+     * html from a view.
+     *
+     * @param string $html The raw view html received from getView()
+     * @param callback $field_name_converter A callback to remove underscores from field names.
+     * @return string A Savant template with hooks for DB_DataObject_FormBuilder
+     * @access public
+     */
+    static public function convertTemplate($html, $field_name_converter = array('File_Infopath', 'convertFieldNames'))
+    {
+        $template = new DOMDocument;
+        $template->loadHTML($html);
+        $body = $template->getElementsByTagName('body')->item(0);
+        $form = $template->createElement('form');
+        foreach ($body->childNodes as $element) {
+            $form->appendChild($element->cloneNode(true));
+        }
+        $body->nodeValue = '';
+        $body->appendChild($form);
+
+        foreach ($template->getElementsByTagName('*') as $element) {
+            // no namespaces, in html mode
+            $field_name = $element->getAttribute('xd:binding');
+            $field_type = $element->getAttribute('xd:xctname');
+            if ($field_name !== '' &&
+               ($field_type === 'PlainText'       ||
+                $field_type === 'combobox'        ||
+                $field_type === 'dropdown'        ||
+                $field_type === 'OptionButton'    ||
+                $field_type === 'DTPicker_DTText' ||
+                $field_type === 'ListBox'         ||
+                $field_type === 'CheckBox')) {
+
+                list(, $field_name) = explode(':', $field_name);
+
+                // A callback to allow the user to deal with how to replace hyphens
+                $field_name = call_user_func($field_name_converter, $field_name);
+
+                $instruction = $template->createProcessingInstruction('php', "echo \$this->form['{$field_name}']['html']?");
+                if ($field_type === 'OptionButton') {
+                    $font_container = $element->parentNode->parentNode;
+                    $font_container->parentNode->replaceChild($instruction, $font_container);
+                } else if ($field_type === 'DTPicker_DTText') {
+                    $div = $element->parentNode;
+                    $div->parentNode->replaceChild($instruction, $div);
+                } else {
+                    $element->parentNode->replaceChild($instruction, $element);
+                }
+            } else if ($element->getAttribute('type') === 'button' && $element->getAttribute('value') === 'Submit') {
+                $instruction = $template->createProcessingInstruction('php', "echo \$this->form['__submit__']['html']?");
+                $element->parentNode->replaceChild($instruction, $element);
+            }
+        }
+
+        $template_html = $template->saveHTML();
+        $template_html = str_replace('<form>', '<form <?php echo $this->form[\'attributes\']?>>', $template_html);
+        return $template_html;
+    }
+
+    /**
+     * Default callback for converting hyphens (which are illegal in php variable names)
+     * 
+     * @param string $field_name The infopath field name to convert
+     * @return string The converted field name
+     * @access public
+     */
+    static public function convertFieldNames($field_name)
+    {
+        return str_replace('-', '_', $field_name);
     }
 
     /**
