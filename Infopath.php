@@ -6,19 +6,21 @@
  * 
  * Notes:
  *  - Does not yet support structured fields.  Only reads fields in the base group.
- *  - There is an inbuilt restriction on the characters that can be used for field and group names.
- *    Only alphanumeric and underscores/hyphens/full stops allowed.
+ *  - There is an inbuilt restriction on the characters that can be used for field
+ *    and group names.  Only alphanumeric and underscores/hyphens/full stops allowed.
  *    (Must only begin with alphabetic or underscore)
  * 
  * Infopath Usage:
- *  - Infopath developers are gay and are not smart enough to realise that sometimes multiple
- *    checkbox answers may sometimes go under the same field.  To convert a group of checkboxes
- *    into a multi-altselect, you'll need to put them into a group.  They're also gay because
- *    2 separate elements are not allowed to have the same name even if they exist in separate
- *    groups, so this means that each checkbox must be prefixed with the group name and an
- *    underscore. 
- *  - Also use "align" function when adding text fields with labels (not necessary on other 
- *    boxes for checkboxes and radio buttons)
+ *  - Infopath does not have the ability to associate multiple checkboxes to one
+ *    field.  There is a similar problem for multi-selects and Infopath does not
+ *    allow these controls when in web compatible mode.  To overcome this problem
+ *    and treat checkboxes as part of the one field when read by this class, they
+ *    need to be put together into groups under "Data Source" section.  However,
+ *    there is also another problem where fields cannot have the same name even if
+ *    they exist in separate groups, so the fieldnames need to be prefixed with the
+ *    group's name in order to avoid conflicts.
+ *  - Use the "align" function when adding text fields with labels (not necessary on
+ *    other boxes for checkboxes and radio buttons)
  * 
  * Resources:
  *   Infopath Devel Community
@@ -40,7 +42,7 @@
  * 
  * Package Dependencies:
  *   - File_Cabinet
- *   - XSL extension
+ *   - XSL extension (optional)
  * 
  * @category File Formats
  * @package File_Infopath
@@ -187,8 +189,8 @@ class File_Infopath
     }
 
     /**
-     * Return the schema in a php friendly format.  The schema will be given as an associative array
-     * in the following format:
+     * Return the schema in a php friendly format.  The schema will be given
+     * as an associative array in the following format:
      * 
      * 'type' => The type of the field,
      * 'default' => The default value as was given from Infopath,
