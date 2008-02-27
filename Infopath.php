@@ -48,7 +48,7 @@
  * @package File_Infopath
  * @author David Sanders <shangxiao@php.net>
  * @license http://www.gnu.org/licenses/lgpl.html LGPL License 3
- * @link http://pear.assessments.com.au/index.php?package=File_Infopath
+ * @link http://pear.php.net/package/File_Infopath
  * @version @package_version@
  *
  */
@@ -65,7 +65,7 @@ class File_Infopath_Exception extends PEAR_Exception {};
  * @package File_Infopath
  * @author David Sanders <shangxiao@php.net>
  * @license http://www.gnu.org/licenses/lgpl.html LGPL License 3
- * @link http://pear.assessments.com.au/index.php?package=File_Infopath
+ * @link http://pear.php.net/package/File_Infopath
  * @version @package_version@
  *
  */
