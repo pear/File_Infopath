@@ -156,6 +156,18 @@ class File_Infopath
         $this->_cab = new File_Cabinet($filename);
 
         // Read manifest.xsf to obtain information about the form
+        $this->_readManifest();
+    }
+
+    /**
+     * Read some general information about the form: Root element, views and submit
+     * information.
+     * 
+     * @access private
+     * @return void
+     */
+    private function _readManifest()
+    {
         $manifest = new DOMDocument;
         $manifest->loadXML($this->_cab->extract('manifest.xsf'));
 
