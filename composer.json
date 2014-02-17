@@ -23,7 +23,8 @@
         "ext-xsl": "May require the xsl PHP extension"
     },
     "require": {
-        "pear/pear_exception": "*"
+        "pear/pear_exception": "*",
+        "pear/file_cabinet": "*"
     },
     "require-dev": {
         "phpunit/phpunit": "*"
