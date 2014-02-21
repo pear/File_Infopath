@@ -1,0 +1,32 @@
+{
+    "authors": [
+        {
+            "email": "shangxiao@php.net",
+            "name": "David Sanders",
+            "role": "Lead"
+        }
+    ],
+    "autoload": {
+        "classmap": [
+            "./"
+        ]
+    },
+    "description": "More info available on: http://pear.php.net/package/File_Infopath",
+    "license": "LGPL",
+    "name": "pear/file_infopath",
+    "support": {
+        "issues": "http://pear.php.net/bugs/search.php?cmd=display&package_name[]=File_Infopath",
+        "source": "https://github.com/pear/File_Infopath"
+    },
+    "type": "library",
+    "suggest": {
+        "ext-xsl": "May require the xsl PHP extension"
+    },
+    "require": {
+        "pear/pear_exception": "*",
+        "pear/file_cabinet": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "*"
+    }
+}
